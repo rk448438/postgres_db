@@ -1,0 +1,76 @@
+-- PostgreSQL Database Setup Script for CRM Billing Software
+
+-- Create Database
+CREATE DATABASE billing_db;
+
+-- Connect to the newly created database
+\c billing_db
+
+-- Create Products Table
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    price DECIMAL(10, 2) NOT NULL,
+    stock_quantity DECIMAL(10, 2) DEFAULT 0,
+    unit VARCHAR(50) DEFAULT 'Nos',
+    category VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Customers Table
+CREATE TABLE IF NOT EXISTS customers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(15) UNIQUE,
+    email VARCHAR(255),
+    total_purchases DECIMAL(10, 2) DEFAULT 0,
+    last_purchase_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Bills Table
+CREATE TABLE IF NOT EXISTS bills (
+    id SERIAL PRIMARY KEY,
+    bill_number VARCHAR(50) UNIQUE NOT NULL,
+    customer_id INTEGER REFERENCES customers(id),
+    total_amount DECIMAL(10, 2) NOT NULL,
+    discount DECIMAL(5, 2) DEFAULT 0,
+    tax DECIMAL(5, 2) DEFAULT 0,
+    payment_method VARCHAR(50),
+    bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Bill Items Table
+CREATE TABLE IF NOT EXISTS bill_items (
+    id SERIAL PRIMARY KEY,
+    bill_id INTEGER REFERENCES bills(id),
+    product_id INTEGER REFERENCES products(id),
+    quantity DECIMAL(10, 2) NOT NULL,
+    unit VARCHAR(50),
+    price_per_unit DECIMAL(10, 2) NOT NULL,
+    total_price DECIMAL(10, 2) NOT NULL
+);
+
+-- Add Indexes for Performance
+CREATE INDEX idx_bills_customer_id ON bills(customer_id);
+CREATE INDEX idx_bill_items_bill_id ON bill_items(bill_id);
+CREATE INDEX idx_bill_items_product_id ON bill_items(product_id);
+
+-- Create a function to update customer total purchases
+CREATE OR REPLACE FUNCTION update_customer_total_purchases()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE customers 
+    SET 
+        total_purchases = total_purchases + NEW.total_amount,
+        last_purchase_date = NEW.bill_date
+    WHERE id = NEW.customer_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger to automatically update customer total purchases
+CREATE TRIGGER update_customer_purchases_trigger
+AFTER INSERT ON bills
+FOR EACH ROW
+EXECUTE FUNCTION update_customer_total_purchases();
