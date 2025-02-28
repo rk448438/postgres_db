@@ -74,3 +74,41 @@ CREATE TRIGGER update_customer_purchases_trigger
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_customer_total_purchases();
+
+
+-- Modify the bill_summary function to update bill_items with additional details
+CREATE OR REPLACE FUNCTION update_bill_items_details()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_bill_number VARCHAR(50);
+BEGIN
+    -- Get the bill number for the current bill
+    SELECT bill_number INTO v_bill_number
+    FROM bills
+    WHERE id = NEW.bill_id;
+
+    -- Update bill_items with additional product details
+    UPDATE bill_items 
+    SET 
+        bill_number = v_bill_number,
+        product_name = (
+            SELECT name 
+            FROM products 
+            WHERE id = NEW.product_id
+        ),
+        product_category = (
+            SELECT category 
+            FROM products 
+            WHERE id = NEW.product_id
+        )
+    WHERE id = NEW.id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger to automatically update bill_items with product details
+CREATE TRIGGER update_bill_items_details_trigger
+AFTER INSERT ON bill_items
+FOR EACH ROW
+EXECUTE FUNCTION update_bill_items_details();
