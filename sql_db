@@ -130,3 +130,46 @@ CREATE TRIGGER update_bill_items_details_trigger
 AFTER INSERT ON bill_items
 FOR EACH ROW
 EXECUTE FUNCTION update_bill_items_details();
+
+-- Create a function to update customer total purchases and bill total items
+CREATE OR REPLACE FUNCTION update_bill_summary()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update total items for the bill
+    UPDATE bills 
+    SET 
+        total_items = (
+            SELECT COALESCE(SUM(quantity), 0)
+            FROM bill_items 
+            WHERE bill_id = NEW.bill_id
+        )
+    WHERE id = NEW.bill_id;
+
+    -- Update customer total purchases
+    UPDATE customers 
+    SET 
+        total_purchases = total_purchases + (
+            SELECT total_amount 
+            FROM bills 
+            WHERE id = NEW.bill_id
+        ),
+        last_purchase_date = (
+            SELECT bill_date 
+            FROM bills 
+            WHERE id = NEW.bill_id
+        )
+    WHERE id = (
+        SELECT customer_id 
+        FROM bills 
+        WHERE id = NEW.bill_id
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger to automatically update bill total items and customer purchases
+CREATE TRIGGER update_bill_summary_trigger
+AFTER INSERT OR UPDATE ON bill_items
+FOR EACH ROW
+EXECUTE FUNCTION update_bill_summary();
